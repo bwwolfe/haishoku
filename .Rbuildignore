@@ -1,0 +1,9 @@
+^data-raw$
+^README\.Rmd$
+^man/figures/make-figures\.R$
+^.*\.Rproj$
+^\.Rproj\.user$
+^man/figures/print-vs-screen\.R$
+^LICENSE$
+^\.gitignore$
+^\.github$
