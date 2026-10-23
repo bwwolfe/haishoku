@@ -149,8 +149,17 @@ haishoku_show(286, cvd = "all")
 ![](man/figures/show-cvd.png)
 
 The default combination, 286, was picked this way: its smallest colour
-difference stays above 20 under simulated deuteranopia and protanopia, and
-all four colours read on white.
+difference stays above 20 under simulated deuteranopia and protanopia. It suits
+bars, fills and maps best. Its Orange Yellow has only 1.8:1 contrast on white,
+below the 3:1 WCAG suggests for graphics, so it can fade as small points or
+thin lines on a white background. For those, 269 (Raw Sienna / Pale Burnt
+Lake / Aconite Violet / Black) is one of only two quads where every colour
+clears 3:1 on white and stays distinct with colour vision deficiency:
+
+```r
+scale_colour_haishoku(269)
+options(haishoku.combo = 269)   # or make it the default for the session
+```
 
 ### Extending a combination
 

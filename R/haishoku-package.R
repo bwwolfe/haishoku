@@ -26,7 +26,8 @@
 "_PACKAGE"
 
 # Burnt Sienna / Orange Yellow / Peacock Blue / Violet Blue: distinct under
-# deutan and protan simulation (min CIEDE2000 > 20) and all readable on white.
+# deutan and protan simulation (min CIEDE2000 > 20). Orange Yellow is only
+# 1.8:1 on white, so 269 is the better choice for small points and thin lines.
 default_combo_id <- 286L
 
 default_combo <- function() getOption("haishoku.combo", default_combo_id)
