@@ -14,6 +14,8 @@ haishoku_palette(
   order = NULL,
   reverse = FALSE,
   extend = FALSE,
+  anchors = c("all", "ends"),
+  middle = c("auto", "light", "dark"),
   mid = NULL,
   volume = 1
 )
@@ -27,6 +29,8 @@ hs_palette(
   order = NULL,
   reverse = FALSE,
   extend = FALSE,
+  anchors = c("all", "ends"),
+  middle = c("auto", "light", "dark"),
   mid = NULL,
   volume = 1
 )
@@ -43,9 +47,7 @@ palettes, colours are interpolated in CIELAB; \code{NULL} returns the anchors.}
 
 \item{type}{\code{"discrete"} keeps the combination's colours; \code{"sequential"}
 orders them by lightness (light to dark) to make a gradient;
-\code{"diverging"} puts the most distinct pair at the ends and a light colour
-in the middle (the combination's lightest colour if it has three or more
-and one is light enough, otherwise Wada's White, or \code{mid}).}
+\code{"diverging"} arranges them as end, middle, end (see Details).}
 
 \item{order}{Order of colours: \code{"book"} (combination order), \code{"lightness"}
 (light to dark), \code{"hue"} or \code{"chroma"} (most saturated first). Defaults to
@@ -56,7 +58,19 @@ and one is light enough, otherwise Wada's White, or \code{mid}).}
 \item{extend}{If \code{TRUE} and \code{n} is larger than the combination, add
 dictionary colours with \code{\link[=haishoku_extend]{haishoku_extend()}}.}
 
-\item{mid}{For diverging palettes, the colour for the midpoint.}
+\item{anchors}{For sequential palettes, \code{"all"} interpolates through every
+colour, light to dark; \code{"ends"} uses only the lightest and darkest, which
+avoids flat or muddy steps through the middle colours. See
+\code{\link[=haishoku_metrics]{haishoku_metrics()}} (\code{seq_quality}, \code{seq_ends_quality}) for which suits a
+combination.}
+
+\item{middle}{For diverging palettes: \code{"light"} for a light middle between
+two darker ends, \code{"dark"} for a dark middle between two lighter ends
+(suits dark backgrounds, or a neutral point that should stand out), or
+\code{"auto"} for whichever arrangement scores best.}
+
+\item{mid}{For diverging palettes, a colour to force as the midpoint. The
+ends are then the most distinct pair of the remaining colours.}
 
 \item{volume}{Which volume of the dictionary to use.}
 
@@ -66,7 +80,9 @@ dictionary colours with \code{\link[=haishoku_extend]{haishoku_extend()}}.}
 An \code{haishoku_palette}: a character vector of hex codes that prints as
 named swatches. Colour names are kept in the \code{"colour_names"} attribute
 rather than as \code{names()}, so the palette can go straight into
-\code{scale_colour_manual(values = )}. \code{haishoku_pal()} returns a function.
+\code{scale_colour_manual(values = )}. Sequential and diverging palettes also
+carry a \code{"quality"} attribute (e.g. \code{"good"}, \code{"muddy"}, \code{"flat"}, or the
+diverging middle used). \code{haishoku_pal()} returns a function.
 }
 \description{
 \code{haishoku_palette()} returns the colours of a combination as a palette for base
@@ -75,9 +91,24 @@ family) or anything else that takes hex codes. \code{haishoku_pal()} returns the
 palette as a function of \code{n}, the form \code{scales} and 'ggplot2' (e.g.
 \code{theme(palette.colour.discrete = haishoku_pal(42))} in 'ggplot2' 4.0) expect.
 }
+\details{
+A diverging palette needs two ends of clearly different hue but similar
+lightness, set well apart in lightness from the middle, and still distinct
+to readers with red-green colour vision deficiency. \code{haishoku_palette()}
+tries every arrangement of the combination's colours and uses the best one
+that meets all of those, falling back to Wada's White or Black as the middle
+for pairs or when none of the combination's own colours works. If nothing
+works it uses the most distinct pair around the lightest colour (or White)
+and records that in the palette's \code{"quality"} attribute; the 'ggplot2'
+scales warn in that case. \code{haishoku_find(diverging = "light")} (or
+\code{"dark"}) lists combinations that work.
+}
 \examples{
 haishoku_palette(42)
-haishoku_palette(302, type = "sequential", n = 7)
+haishoku_palette(232, type = "sequential", n = 7)
+haishoku_palette(252, type = "sequential", anchors = "ends", n = 7)
+haishoku_palette(226, type = "diverging", n = 7)
+haishoku_palette(255, type = "diverging", middle = "dark")
 haishoku_palette(c("Coral Red", "Black", "White"))
 plot(haishoku_palette(250))
 

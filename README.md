@@ -13,9 +13,18 @@ all **159 named colours** with the book's **CMYK printing recipes**, and all
 
 ## Installation
 
+haishoku isn't on CRAN yet, so install it from GitHub. The lightest way is
+`remotes`, a small package with no dependencies of its own:
+
 ```r
-# install.packages("remotes")
+install.packages("remotes")
 remotes::install_github("bwwolfe/haishoku")
+```
+
+or, if you use `pak`:
+
+```r
+pak::pak("bwwolfe/haishoku")
 ```
 
 ## Palettes and scales
@@ -45,12 +54,47 @@ ggplot(faithfuld, aes(waiting, eruptions, fill = density)) +
   geom_raster() +
   scale_fill_haishoku_c(232)                 # light-to-dark through the combination
 
-scale_fill_haishoku_c(286, type = "diverging", midpoint = 0)
+scale_fill_haishoku_c(252, anchors = "ends")             # lightest to darkest only
+scale_fill_haishoku_c(226, type = "diverging", midpoint = 0)
+scale_fill_haishoku_c(255, type = "diverging", middle = "dark")
 scale_fill_haishoku_b(232)                   # binned
 scale_fill_haishoku_d(42, extend = TRUE)     # more levels than colours
 ```
 
 <img src="man/figures/scale-discrete.png" width="49%"> <img src="man/figures/scale-continuous.png" width="49%">
+
+### Gradients from qualitative colours
+
+Wada's combinations were made to sit together, not to run in order, so many
+make poor gradients. A gradient fails in one of two ways:
+- **Flat:** two neighbouring colours are close in lightness, so the scale
+  changes hue without getting darker.
+- **Muddy:** it passes through grey between two opposing hues.
+
+`haishoku_metrics()` grades every combination, and the continuous and binned
+scales warn when you pick a poor one, suggesting `anchors = "ends"` when that
+fixes it. Of the 348 combinations:
+
+| Makes a good or usable… | Pairs | Trios | Quads | All |
+|---|---|---|---|---|
+| sequential scale through every colour (`anchors = "all"`) | 79 | 42 | 17 | 138 |
+| sequential scale, lightest to darkest only (`anchors = "ends"`) | 79 | 86 | 78 | 243 |
+| diverging scale with a light middle | 10 | 19 | 28 | 57 |
+| diverging scale with a dark middle | 12 | 24 | 35 | 71 |
+
+A diverging scale needs two ends of clearly different hue and similar
+lightness, still distinct to red-green colourblind readers, around a middle
+that is clearly lighter or darker. The scales try every arrangement of the
+combination's colours and use the best that qualifies. Pairs, and
+combinations where none of their own colours works as a middle, can use Wada's
+White or Black instead. A dark middle (`middle = "dark"`) suits dark
+backgrounds, or data where the neutral point should stand out.
+
+```r
+haishoku_find(sequential = "good", size = 3)
+haishoku_find(sequential = "good", anchors = "ends", size = 4)
+haishoku_find(diverging = "dark")
+```
 
 Palettes also work in base graphics (`barplot(1:4, col = haishoku_palette(286))`),
 in `scale_*_manual(values = haishoku_palette(286))`, and as palette functions:
@@ -136,8 +180,8 @@ These tools check which ones also work for data.
 # Four-colour combinations that stay distinct with deuteranopia and protanopia
 haishoku_find(size = 4, min_de = 15, cvd_safe = TRUE)
 
-# Good sequential ramps: large, even lightness steps
-haishoku_find(size = 3, sort_by = "l_step")
+# Clean sequential ramps, widest lightness steps first
+haishoku_find(size = 3, sequential = "good", sort_by = "l_step")
 
 # Distinctness (CIEDE2000), CVD-simulated distinctness, lightness, contrast
 haishoku_metrics(c(42, 286))

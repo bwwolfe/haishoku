@@ -8,10 +8,21 @@
 #' Discrete scales use the combination's colours in order, so a combination
 #' of four colours serves up to four levels. For more, set `extend = TRUE` to
 #' add dictionary colours with [haishoku_extend()], or look for a better fitting
-#' combination with [haishoku_find()]. Continuous and binned scales interpolate in
-#' CIELAB between the colours ordered light to dark (`type = "sequential"`),
-#' or between two distinct colours through a light midpoint
-#' (`type = "diverging"`).
+#' combination with [haishoku_find()].
+#'
+#' Continuous and binned scales interpolate in CIELAB. Sequential scales run
+#' light to dark through the combination's colours (`anchors = "all"`) or
+#' between just its lightest and darkest (`anchors = "ends"`). Diverging scales
+#' use the best end-middle-end arrangement of the combination (see
+#' [haishoku_palette()]), with a light or dark middle.
+#'
+#' Wada's combinations were chosen for harmony, not as gradients, and many
+#' make poor ones. The scales warn when a sequential scale would be flat
+#' (neighbouring colours too close in lightness) or muddy (greying between
+#' opposing hues), or when no arrangement makes a colourblind-safe diverging
+#' scale. Use `haishoku_find(sequential = "good")` or
+#' `haishoku_find(diverging = "light")` to find combinations that work, or wrap
+#' the scale in [suppressWarnings()] if the look is intended.
 #'
 #' @param combo A combination number, or colours, as for [haishoku_palette()].
 #'   Defaults to `getOption("haishoku.combo")`, else combination 286.
@@ -21,7 +32,7 @@
 #' @param discrete Use a discrete scale (`TRUE`) or a continuous one.
 #' @param type For continuous and binned scales, `"sequential"` or
 #'   `"diverging"`.
-#' @param order,reverse,extend,mid,volume See [haishoku_palette()].
+#' @param order,reverse,extend,anchors,middle,mid,volume See [haishoku_palette()].
 #' @param midpoint For diverging scales, the data value at the midpoint
 #'   colour.
 #' @param aesthetics The aesthetics the scale applies to.
@@ -38,6 +49,15 @@
 #'   geom_raster() +
 #'   scale_fill_haishoku_c(232)
 #'
+#' # Lightest to darkest only, for a combination whose middle colours clash
+#' ggplot(faithfuld, aes(waiting, eruptions, fill = density)) +
+#'   geom_raster() +
+#'   scale_fill_haishoku_c(252, anchors = "ends")
+#'
+#' ggplot(faithfuld, aes(waiting, eruptions, fill = density - 0.01)) +
+#'   geom_raster() +
+#'   scale_fill_haishoku_c(226, type = "diverging")
+#'
 #' ggplot(mpg, aes(class, fill = class)) +
 #'   geom_bar() +
 #'   scale_fill_haishoku_d(42, extend = TRUE)
@@ -52,29 +72,68 @@ haishoku_d <- function(aesthetics, combo, order, reverse, extend, volume, ...) {
   ggplot2::discrete_scale(aesthetics, palette = pal, ...)
 }
 
-haishoku_c <- function(aesthetics, combo, type, order, reverse, mid, midpoint, volume,
-                       guide, ...) {
+# Anchors for a continuous or binned scale, warning if they make a poor one.
+gradient_anchors <- function(combo, type, order, reverse, anchors, middle, mid, volume) {
   type <- match.arg(type, c("sequential", "diverging"))
-  anchors <- haishoku_palette(combo, type = type, order = order, reverse = reverse,
-                        mid = mid, volume = volume)
-  rescaler <- if (type == "diverging") {
+  pal <- haishoku_palette(combo, type = type, order = order, reverse = reverse,
+                          anchors = anchors, middle = middle, mid = mid, volume = volume)
+  warn_gradient(pal, combo, type, order, anchors, volume)
+  pal
+}
+
+warn_gradient <- function(pal, combo, type, order, anchors, volume) {
+  quality <- attr(pal, "quality")
+  if (is.null(quality)) return(invisible())
+  label <- attr(pal, "combo")
+  what <- if (label %in% c("custom", "extended")) "This palette" else paste("Combination", label)
+  if (type == "sequential" && quality %in% c("flat", "muddy")) {
+    why <- if (quality == "flat") {
+      "neighbouring colours are too close in lightness, so it changes hue without getting darker"
+    } else {
+      "it greys out between opposing hues"
+    }
+    ends <- if (anchors == "all") {
+      attr(haishoku_palette(combo, type = "sequential", order = order, anchors = "ends",
+                            volume = volume), "quality")
+    }
+    hint <- if (!is.null(ends) && gradient_ok(ends)) {
+      " `anchors = \"ends\"` (lightest to darkest only) makes a cleaner one."
+    } else {
+      " See `haishoku_find(sequential = \"good\")` for combinations that work."
+    }
+    warning(what, " makes a ", quality, " sequential scale: ", why, ".", hint, call. = FALSE)
+  }
+  if (type == "diverging" && quality == "none") {
+    warning(what, " has no colourblind-safe diverging arrangement (two distinct ends of ",
+            "similar lightness around a clearly lighter or darker middle); using ",
+            paste(colour_names(pal), collapse = " / "), ". See ",
+            "`haishoku_find(diverging = \"light\")` or `\"dark\"` for combinations that work.",
+            call. = FALSE)
+  }
+  invisible()
+}
+
+haishoku_c <- function(aesthetics, combo, type, order, reverse, anchors, middle, mid, midpoint,
+                       volume, guide, ...) {
+  pal <- gradient_anchors(combo, type, order, reverse, anchors, middle, mid, volume)
+  rescaler <- if (identical(attr(pal, "type"), "diverging")) {
     function(x, to = c(0, 1), from = range(x, na.rm = TRUE)) {
       scales::rescale_mid(x, to, from, midpoint)
     }
   } else {
     scales::rescale
   }
-  ggplot2::continuous_scale(aesthetics, palette = scales::pal_gradient_n(as.character(anchors)),
+  ggplot2::continuous_scale(aesthetics, palette = scales::pal_gradient_n(as.character(pal)),
                             rescaler = rescaler, guide = guide, ...)
 }
 
-haishoku_b <- function(aesthetics, combo, type, order, reverse, mid, volume, guide, ...) {
-  type <- match.arg(type, c("sequential", "diverging"))
-  pal <- function(n) {
-    as.character(haishoku_palette(combo, n = n, type = type, order = order, reverse = reverse,
-                              mid = mid, volume = volume))
-  }
-  ggplot2::binned_scale(aesthetics, palette = function(x) pal(length(x)), guide = guide, ...)
+haishoku_b <- function(aesthetics, combo, type, order, reverse, anchors, middle, mid, volume,
+                       guide, ...) {
+  pal <- scales::pal_gradient_n(as.character(
+    gradient_anchors(combo, type, order, reverse, anchors, middle, mid, volume)
+  ))
+  ggplot2::binned_scale(aesthetics, palette = function(x) pal(seq(0, 1, length.out = length(x))),
+                        guide = guide, ...)
 }
 
 #' @rdname scale_haishoku
@@ -118,33 +177,39 @@ scale_fill_haishoku_d <- function(combo = default_combo(), ..., order = "book",
 #' @rdname scale_haishoku
 #' @export
 scale_colour_haishoku_c <- function(combo = default_combo(), ..., type = "sequential",
-                                    order = NULL, reverse = FALSE, mid = NULL, midpoint = 0,
-                                    volume = 1, aesthetics = "colour", guide = "colourbar") {
-  haishoku_c(aesthetics, combo, type, order, reverse, mid, midpoint, volume, guide, ...)
+                                    order = NULL, reverse = FALSE, anchors = "all",
+                                    middle = "auto", mid = NULL, midpoint = 0, volume = 1,
+                                    aesthetics = "colour", guide = "colourbar") {
+  haishoku_c(aesthetics, combo, type, order, reverse, anchors, middle, mid, midpoint,
+             volume, guide, ...)
 }
 
 #' @rdname scale_haishoku
 #' @export
 scale_fill_haishoku_c <- function(combo = default_combo(), ..., type = "sequential",
-                                  order = NULL, reverse = FALSE, mid = NULL, midpoint = 0,
-                                  volume = 1, aesthetics = "fill", guide = "colourbar") {
-  haishoku_c(aesthetics, combo, type, order, reverse, mid, midpoint, volume, guide, ...)
+                                  order = NULL, reverse = FALSE, anchors = "all",
+                                  middle = "auto", mid = NULL, midpoint = 0, volume = 1,
+                                  aesthetics = "fill", guide = "colourbar") {
+  haishoku_c(aesthetics, combo, type, order, reverse, anchors, middle, mid, midpoint,
+             volume, guide, ...)
 }
 
 #' @rdname scale_haishoku
 #' @export
 scale_colour_haishoku_b <- function(combo = default_combo(), ..., type = "sequential",
-                                    order = NULL, reverse = FALSE, mid = NULL, volume = 1,
+                                    order = NULL, reverse = FALSE, anchors = "all",
+                                    middle = "auto", mid = NULL, volume = 1,
                                     aesthetics = "colour", guide = "coloursteps") {
-  haishoku_b(aesthetics, combo, type, order, reverse, mid, volume, guide, ...)
+  haishoku_b(aesthetics, combo, type, order, reverse, anchors, middle, mid, volume, guide, ...)
 }
 
 #' @rdname scale_haishoku
 #' @export
 scale_fill_haishoku_b <- function(combo = default_combo(), ..., type = "sequential",
-                                  order = NULL, reverse = FALSE, mid = NULL, volume = 1,
+                                  order = NULL, reverse = FALSE, anchors = "all",
+                                  middle = "auto", mid = NULL, volume = 1,
                                   aesthetics = "fill", guide = "coloursteps") {
-  haishoku_b(aesthetics, combo, type, order, reverse, mid, volume, guide, ...)
+  haishoku_b(aesthetics, combo, type, order, reverse, anchors, middle, mid, volume, guide, ...)
 }
 
 #' @rdname scale_haishoku

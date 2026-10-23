@@ -17,9 +17,9 @@ test_that("too many levels error helpfully unless extended", {
 
 test_that("continuous and binned scales build", {
   p <- ggplot(faithfuld, aes(waiting, eruptions, fill = density)) + geom_raster()
-  expect_s3_class(scale_fill_haishoku(286, discrete = FALSE), "ScaleContinuous")
-  expect_no_error(ggplot_build(p + scale_fill_haishoku_c(286)))
-  expect_no_error(ggplot_build(p + scale_fill_haishoku_b(286)))
+  expect_s3_class(scale_fill_haishoku(232, discrete = FALSE), "ScaleContinuous")
+  expect_no_error(ggplot_build(p + scale_fill_haishoku_c(232)))
+  expect_no_error(ggplot_build(p + scale_fill_haishoku_b(232)))
   expect_no_error(ggplot_build(p + scale_colour_haishoku_c(286, type = "diverging",
                                                            midpoint = 0.02, aesthetics = "fill")))
 })

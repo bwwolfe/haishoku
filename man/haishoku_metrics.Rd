@@ -20,8 +20,8 @@ A data frame with one row per combination: \code{combo}, \code{size},
 \code{colours}, \code{min_de}, \code{min_de_deutan}, \code{min_de_protan}, \code{min_de_tritan},
 \code{min_de_cvd} (the worse of deutan and protan, the common forms),
 \code{l_range} (lightness spread), \code{l_step} (smallest lightness gap between
-neighbouring colours; large values make good sequential scales) and
-\code{max_contrast}.
+neighbouring colours), \code{max_contrast}, \code{seq_quality},
+\code{seq_ends_quality}, \code{div_light} and \code{div_dark}.
 }
 \description{
 For each combination (or a custom palette), the smallest CIEDE2000
@@ -34,8 +34,20 @@ As a rough guide, a minimum difference of 10 or more keeps categories
 distinguishable in small marks such as points and lines; below 5 colours
 are easily confused. Simulations are from \code{\link[colorspace:simulate_cvd]{colorspace::simulate_cvd()}} at
 full severity.
+
+The gradient columns grade the combination as a continuous scale.
+\code{seq_quality} interpolates light to dark through every colour;
+\code{seq_ends_quality} through only the lightest and darkest (\code{anchors = "ends"}). Each is \code{"good"} (every lightness step at least 15, no greying),
+\code{"usable"}, \code{"muddy"} (chroma drops below half of a straight blend between
+two colours, i.e. it greys out between opposing hues) or \code{"flat"} (two
+neighbouring colours less than 8 apart in lightness, so the scale changes
+hue without getting darker). \code{div_light} and \code{div_dark} say whether some
+arrangement makes a diverging scale with a light or dark middle: two ends
+of distinct hue (CIEDE2000 >= 20, also >= 15 under deutan and protan
+simulation) within 12 of each other in lightness, and at least 25 lighter
+or darker in the middle. Pairs may use Wada's White or Black as the middle.
 }
 \examples{
-haishoku_metrics(c(42, 302))
+haishoku_metrics(c(42, 232, 302))
 haishoku_metrics(c("Black", "Coral Red", "White"))
 }

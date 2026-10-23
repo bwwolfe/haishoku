@@ -54,6 +54,19 @@ haishoku_contrast <- function(fg, bg, volume = 1) {
 #' are easily confused. Simulations are from [colorspace::simulate_cvd()] at
 #' full severity.
 #'
+#' The gradient columns grade the combination as a continuous scale.
+#' `seq_quality` interpolates light to dark through every colour;
+#' `seq_ends_quality` through only the lightest and darkest (`anchors =
+#' "ends"`). Each is `"good"` (every lightness step at least 15, no greying),
+#' `"usable"`, `"muddy"` (chroma drops below half of a straight blend between
+#' two colours, i.e. it greys out between opposing hues) or `"flat"` (two
+#' neighbouring colours less than 8 apart in lightness, so the scale changes
+#' hue without getting darker). `div_light` and `div_dark` say whether some
+#' arrangement makes a diverging scale with a light or dark middle: two ends
+#' of distinct hue (CIEDE2000 >= 20, also >= 15 under deutan and protan
+#' simulation) within 12 of each other in lightness, and at least 25 lighter
+#' or darker in the middle. Pairs may use Wada's White or Black as the middle.
+#'
 #' @param x Combination numbers (default: all), or a single palette given as
 #'   an [haishoku_palette()] or a character vector of colours.
 #' @param volume Which volume of the dictionary to use.
@@ -61,27 +74,43 @@ haishoku_contrast <- function(fg, bg, volume = 1) {
 #'   `colours`, `min_de`, `min_de_deutan`, `min_de_protan`, `min_de_tritan`,
 #'   `min_de_cvd` (the worse of deutan and protan, the common forms),
 #'   `l_range` (lightness spread), `l_step` (smallest lightness gap between
-#'   neighbouring colours; large values make good sequential scales) and
-#'   `max_contrast`.
+#'   neighbouring colours), `max_contrast`, `seq_quality`,
+#'   `seq_ends_quality`, `div_light` and `div_dark`.
 #' @export
 #' @examples
-#' haishoku_metrics(c(42, 302))
+#' haishoku_metrics(c(42, 232, 302))
 #' haishoku_metrics(c("Black", "Coral Red", "White"))
 haishoku_metrics <- function(x = NULL, volume = 1) {
   if (is.null(x) || (is.numeric(x) && !inherits(x, "haishoku_palette"))) {
-    combos <- combos_in(volume)
-    if (!is.null(x)) combos <- combos[combos$combo %in% x, ]
-    groups <- split(combos, combos$combo)
-    palettes <- lapply(groups, function(d) d$hex[order(d$position)])
-    names_ <- vapply(groups, function(d) paste(d$name[order(d$position)], collapse = " / "), "")
-    ids <- as.integer(names(groups))
-  } else {
-    pal <- haishoku_palette(x, volume = volume)
-    palettes <- list(as.character(pal))
-    names_ <- paste(ifelse(colour_names(pal) == "", as.character(pal), colour_names(pal)), collapse = " / ")
-    ids <- NA_integer_
+    key <- paste(volume, collapse = "-")
+    out <- metrics_cache[[key]]
+    if (is.null(out)) {
+      combos <- combos_in(volume)
+      groups <- split(combos, combos$combo)
+      out <- compute_metrics(
+        palettes = lapply(groups, function(d) d$hex[order(d$position)]),
+        names_ = vapply(groups, function(d) paste(d$name[order(d$position)], collapse = " / "), ""),
+        ids = as.integer(names(groups))
+      )
+      assign(key, out, envir = metrics_cache)
+    }
+    if (!is.null(x)) out <- out[out$combo %in% x, ]
+    rownames(out) <- NULL
+    return(out)
   }
+  pal <- haishoku_palette(x, volume = volume)
+  compute_metrics(
+    palettes = list(as.character(pal)),
+    names_ = paste(ifelse(colour_names(pal) == "", as.character(pal), colour_names(pal)),
+                   collapse = " / "),
+    ids = NA_integer_
+  )
+}
 
+# Metrics for every combination are computed once per session.
+metrics_cache <- new.env(parent = emptyenv())
+
+compute_metrics <- function(palettes, names_, ids) {
   all_hex <- unique(unlist(palettes))
   sims <- lapply(c(deutan = "deutan", protan = "protan", tritan = "tritan"),
                  function(type) stats::setNames(simulate_cvd(all_hex, type), all_hex))
@@ -108,6 +137,7 @@ haishoku_metrics <- function(x = NULL, volume = 1) {
   out[num] <- lapply(out[num], round, 1)
   out <- out[c("combo", "size", "colours", "min_de", "min_de_deutan", "min_de_protan",
                "min_de_tritan", "min_de_cvd", "l_range", "l_step", "max_contrast")]
+  out <- cbind(out, do.call(rbind, lapply(palettes, gradient_summary)))
   rownames(out) <- NULL
   out
 }
@@ -127,15 +157,30 @@ haishoku_metrics <- function(x = NULL, volume = 1) {
 #'   deuteranopia and protanopia.
 #' @param min_contrast Minimum contrast ratio between the combination's most
 #'   and least luminous colours (see [haishoku_contrast()]).
-#' @param sort_by Metric to sort by, largest first: see [haishoku_metrics()].
+#' @param sequential Gradient grades to accept for a sequential scale, e.g.
+#'   `"good"` or `c("good", "usable")`. See [haishoku_metrics()].
+#' @param anchors Which sequential grade `sequential` filters on: `"all"`
+#'   (`seq_quality`) or `"ends"` (`seq_ends_quality`).
+#' @param diverging `"light"`, `"dark"` or `"any"` to keep combinations that
+#'   make a diverging scale with that kind of middle.
+#' @param sort_by Numeric metric to sort by, largest first: see
+#'   [haishoku_metrics()].
 #' @param volume Which volume of the dictionary to search.
 #' @return Rows of [haishoku_metrics()] that pass the filters.
 #' @export
 #' @examples
 #' haishoku_find(size = 4, min_de = 15, cvd_safe = TRUE)
 #' haishoku_find(contains = "Coral Red", size = 3)
+#' haishoku_find(size = 3, sequential = "good", sort_by = "l_step")
+#' haishoku_find(sequential = "good", anchors = "ends", size = 4)
+#' haishoku_find(diverging = "dark")
 haishoku_find <- function(size = NULL, contains = NULL, min_de = 0, cvd_safe = FALSE,
-                    min_contrast = 1, sort_by = "min_de_cvd", volume = 1) {
+                    min_contrast = 1, sequential = NULL, anchors = c("all", "ends"),
+                    diverging = NULL, sort_by = "min_de_cvd", volume = 1) {
+  anchors <- match.arg(anchors)
+  if (!is.null(sequential)) sequential <- match.arg(sequential, c("good", "usable", "muddy", "flat"),
+                                                    several.ok = TRUE)
+  if (!is.null(diverging)) diverging <- match.arg(diverging, c("light", "dark", "any"))
   candidates <- NULL
   if (!is.null(contains)) {
     candidates <- haishoku_combos_with(contains, size, volume)$combo
@@ -145,8 +190,16 @@ haishoku_find <- function(size = NULL, contains = NULL, min_de = 0, cvd_safe = F
   if (!is.null(size)) m <- m[m$size %in% size, ]
   keep <- m$min_de >= min_de & m$max_contrast >= min_contrast
   if (cvd_safe) keep <- keep & m$min_de_cvd >= min_de
+  if (!is.null(sequential)) {
+    grade <- if (anchors == "ends") m$seq_ends_quality else m$seq_quality
+    keep <- keep & grade %in% sequential
+  }
+  if (!is.null(diverging)) {
+    keep <- keep & switch(diverging, light = m$div_light, dark = m$div_dark,
+                          any = m$div_light | m$div_dark)
+  }
   m <- m[keep, ]
-  sort_by <- match.arg(sort_by, setdiff(names(m), c("colours")))
+  sort_by <- match.arg(sort_by, names(m)[vapply(m, is.numeric, TRUE) & names(m) != "combo"])
   m <- m[order(-m[[sort_by]], m$combo), ]
   rownames(m) <- NULL
   m

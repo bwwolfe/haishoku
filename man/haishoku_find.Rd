@@ -11,6 +11,9 @@ haishoku_find(
   min_de = 0,
   cvd_safe = FALSE,
   min_contrast = 1,
+  sequential = NULL,
+  anchors = c("all", "ends"),
+  diverging = NULL,
   sort_by = "min_de_cvd",
   volume = 1
 )
@@ -21,6 +24,9 @@ hs_find(
   min_de = 0,
   cvd_safe = FALSE,
   min_contrast = 1,
+  sequential = NULL,
+  anchors = c("all", "ends"),
+  diverging = NULL,
   sort_by = "min_de_cvd",
   volume = 1
 )
@@ -40,7 +46,17 @@ deuteranopia and protanopia.}
 \item{min_contrast}{Minimum contrast ratio between the combination's most
 and least luminous colours (see \code{\link[=haishoku_contrast]{haishoku_contrast()}}).}
 
-\item{sort_by}{Metric to sort by, largest first: see \code{\link[=haishoku_metrics]{haishoku_metrics()}}.}
+\item{sequential}{Gradient grades to accept for a sequential scale, e.g.
+\code{"good"} or \code{c("good", "usable")}. See \code{\link[=haishoku_metrics]{haishoku_metrics()}}.}
+
+\item{anchors}{Which sequential grade \code{sequential} filters on: \code{"all"}
+(\code{seq_quality}) or \code{"ends"} (\code{seq_ends_quality}).}
+
+\item{diverging}{\code{"light"}, \code{"dark"} or \code{"any"} to keep combinations that
+make a diverging scale with that kind of middle.}
+
+\item{sort_by}{Numeric metric to sort by, largest first: see
+\code{\link[=haishoku_metrics]{haishoku_metrics()}}.}
 
 \item{volume}{Which volume of the dictionary to search.}
 }
@@ -55,4 +71,7 @@ vision deficiency.
 \examples{
 haishoku_find(size = 4, min_de = 15, cvd_safe = TRUE)
 haishoku_find(contains = "Coral Red", size = 3)
+haishoku_find(size = 3, sequential = "good", sort_by = "l_step")
+haishoku_find(sequential = "good", anchors = "ends", size = 4)
+haishoku_find(diverging = "dark")
 }

@@ -56,6 +56,8 @@ scale_colour_haishoku_c(
   type = "sequential",
   order = NULL,
   reverse = FALSE,
+  anchors = "all",
+  middle = "auto",
   mid = NULL,
   midpoint = 0,
   volume = 1,
@@ -69,6 +71,8 @@ scale_fill_haishoku_c(
   type = "sequential",
   order = NULL,
   reverse = FALSE,
+  anchors = "all",
+  middle = "auto",
   mid = NULL,
   midpoint = 0,
   volume = 1,
@@ -82,6 +86,8 @@ scale_colour_haishoku_b(
   type = "sequential",
   order = NULL,
   reverse = FALSE,
+  anchors = "all",
+  middle = "auto",
   mid = NULL,
   volume = 1,
   aesthetics = "colour",
@@ -94,6 +100,8 @@ scale_fill_haishoku_b(
   type = "sequential",
   order = NULL,
   reverse = FALSE,
+  anchors = "all",
+  middle = "auto",
   mid = NULL,
   volume = 1,
   aesthetics = "fill",
@@ -123,6 +131,8 @@ scale_color_haishoku_c(
   type = "sequential",
   order = NULL,
   reverse = FALSE,
+  anchors = "all",
+  middle = "auto",
   mid = NULL,
   midpoint = 0,
   volume = 1,
@@ -136,6 +146,8 @@ scale_color_haishoku_b(
   type = "sequential",
   order = NULL,
   reverse = FALSE,
+  anchors = "all",
+  middle = "auto",
   mid = NULL,
   volume = 1,
   aesthetics = "colour",
@@ -154,7 +166,7 @@ Defaults to \code{getOption("haishoku.combo")}, else combination 286.}
 
 \item{aesthetics}{The aesthetics the scale applies to.}
 
-\item{order, reverse, extend, mid, volume}{See \code{\link[=haishoku_palette]{haishoku_palette()}}.}
+\item{order, reverse, extend, anchors, middle, mid, volume}{See \code{\link[=haishoku_palette]{haishoku_palette()}}.}
 
 \item{type}{For continuous and binned scales, \code{"sequential"} or
 \code{"diverging"}.}
@@ -177,10 +189,21 @@ continuous scale.
 Discrete scales use the combination's colours in order, so a combination
 of four colours serves up to four levels. For more, set \code{extend = TRUE} to
 add dictionary colours with \code{\link[=haishoku_extend]{haishoku_extend()}}, or look for a better fitting
-combination with \code{\link[=haishoku_find]{haishoku_find()}}. Continuous and binned scales interpolate in
-CIELAB between the colours ordered light to dark (\code{type = "sequential"}),
-or between two distinct colours through a light midpoint
-(\code{type = "diverging"}).
+combination with \code{\link[=haishoku_find]{haishoku_find()}}.
+
+Continuous and binned scales interpolate in CIELAB. Sequential scales run
+light to dark through the combination's colours (\code{anchors = "all"}) or
+between just its lightest and darkest (\code{anchors = "ends"}). Diverging scales
+use the best end-middle-end arrangement of the combination (see
+\code{\link[=haishoku_palette]{haishoku_palette()}}), with a light or dark middle.
+
+Wada's combinations were chosen for harmony, not as gradients, and many
+make poor ones. The scales warn when a sequential scale would be flat
+(neighbouring colours too close in lightness) or muddy (greying between
+opposing hues), or when no arrangement makes a colourblind-safe diverging
+scale. Use \code{haishoku_find(sequential = "good")} or
+\code{haishoku_find(diverging = "light")} to find combinations that work, or wrap
+the scale in \code{\link[=suppressWarnings]{suppressWarnings()}} if the look is intended.
 }
 \examples{
 library(ggplot2)
@@ -191,6 +214,15 @@ ggplot(mpg, aes(displ, hwy, colour = drv)) +
 ggplot(faithfuld, aes(waiting, eruptions, fill = density)) +
   geom_raster() +
   scale_fill_haishoku_c(232)
+
+# Lightest to darkest only, for a combination whose middle colours clash
+ggplot(faithfuld, aes(waiting, eruptions, fill = density)) +
+  geom_raster() +
+  scale_fill_haishoku_c(252, anchors = "ends")
+
+ggplot(faithfuld, aes(waiting, eruptions, fill = density - 0.01)) +
+  geom_raster() +
+  scale_fill_haishoku_c(226, type = "diverging")
 
 ggplot(mpg, aes(class, fill = class)) +
   geom_bar() +

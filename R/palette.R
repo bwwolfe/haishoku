@@ -13,25 +13,49 @@
 #'   palettes, colours are interpolated in CIELAB; `NULL` returns the anchors.
 #' @param type `"discrete"` keeps the combination's colours; `"sequential"`
 #'   orders them by lightness (light to dark) to make a gradient;
-#'   `"diverging"` puts the most distinct pair at the ends and a light colour
-#'   in the middle (the combination's lightest colour if it has three or more
-#'   and one is light enough, otherwise Wada's White, or `mid`).
+#'   `"diverging"` arranges them as end, middle, end (see Details).
+#' @param anchors For sequential palettes, `"all"` interpolates through every
+#'   colour, light to dark; `"ends"` uses only the lightest and darkest, which
+#'   avoids flat or muddy steps through the middle colours. See
+#'   [haishoku_metrics()] (`seq_quality`, `seq_ends_quality`) for which suits a
+#'   combination.
+#' @param middle For diverging palettes: `"light"` for a light middle between
+#'   two darker ends, `"dark"` for a dark middle between two lighter ends
+#'   (suits dark backgrounds, or a neutral point that should stand out), or
+#'   `"auto"` for whichever arrangement scores best.
 #' @param order Order of colours: `"book"` (combination order), `"lightness"`
 #'   (light to dark), `"hue"` or `"chroma"` (most saturated first). Defaults to
 #'   `"book"` for discrete and `"lightness"` for sequential palettes.
 #' @param reverse Reverse the palette.
 #' @param extend If `TRUE` and `n` is larger than the combination, add
 #'   dictionary colours with [haishoku_extend()].
-#' @param mid For diverging palettes, the colour for the midpoint.
+#' @param mid For diverging palettes, a colour to force as the midpoint. The
+#'   ends are then the most distinct pair of the remaining colours.
 #' @param volume Which volume of the dictionary to use.
+#' @details
+#' A diverging palette needs two ends of clearly different hue but similar
+#' lightness, set well apart in lightness from the middle, and still distinct
+#' to readers with red-green colour vision deficiency. `haishoku_palette()`
+#' tries every arrangement of the combination's colours and uses the best one
+#' that meets all of those, falling back to Wada's White or Black as the middle
+#' for pairs or when none of the combination's own colours works. If nothing
+#' works it uses the most distinct pair around the lightest colour (or White)
+#' and records that in the palette's `"quality"` attribute; the 'ggplot2'
+#' scales warn in that case. `haishoku_find(diverging = "light")` (or
+#' `"dark"`) lists combinations that work.
 #' @return An `haishoku_palette`: a character vector of hex codes that prints as
 #'   named swatches. Colour names are kept in the `"colour_names"` attribute
 #'   rather than as `names()`, so the palette can go straight into
-#'   `scale_colour_manual(values = )`. `haishoku_pal()` returns a function.
+#'   `scale_colour_manual(values = )`. Sequential and diverging palettes also
+#'   carry a `"quality"` attribute (e.g. `"good"`, `"muddy"`, `"flat"`, or the
+#'   diverging middle used). `haishoku_pal()` returns a function.
 #' @export
 #' @examples
 #' haishoku_palette(42)
-#' haishoku_palette(302, type = "sequential", n = 7)
+#' haishoku_palette(232, type = "sequential", n = 7)
+#' haishoku_palette(252, type = "sequential", anchors = "ends", n = 7)
+#' haishoku_palette(226, type = "diverging", n = 7)
+#' haishoku_palette(255, type = "diverging", middle = "dark")
 #' haishoku_palette(c("Coral Red", "Black", "White"))
 #' plot(haishoku_palette(250))
 #'
@@ -39,8 +63,11 @@
 haishoku_palette <- function(combo = default_combo(), n = NULL,
                        type = c("discrete", "sequential", "diverging"),
                        order = NULL, reverse = FALSE, extend = FALSE,
+                       anchors = c("all", "ends"), middle = c("auto", "light", "dark"),
                        mid = NULL, volume = 1) {
   type <- match.arg(type)
+  anchors <- match.arg(anchors)
+  middle <- match.arg(middle)
   if (inherits(combo, "haishoku_palette")) {
     hex <- as_hex(combo)
     label <- attr(combo, "combo")
@@ -55,9 +82,19 @@ haishoku_palette <- function(combo = default_combo(), n = NULL,
 
   order <- match.arg(order %||% if (type == "discrete") "book" else "lightness",
                      c("book", "lightness", "hue", "chroma"))
+  book <- hex
   hex <- hex[order_colours(hex, order)]
 
-  if (type == "diverging") hex <- diverging_anchors(hex, mid, volume)
+  quality <- NULL
+  if (type == "sequential") {
+    hex <- sequential_anchors(hex, anchors)
+    if (order == "lightness") quality <- gradient_check(hex)$verdict
+  }
+  if (type == "diverging") {
+    hex <- diverging_anchors(book, mid, middle, volume)
+    quality <- attr(hex, "middle")
+  }
+  hex <- as.character(hex)
   if (reverse) hex <- rev(hex)
 
   if (!is.null(n)) {
@@ -75,7 +112,9 @@ haishoku_palette <- function(combo = default_combo(), n = NULL,
       hex <- scales::pal_gradient_n(hex)(seq(0, 1, length.out = n))
     }
   }
-  new_haishoku_palette(toupper(hex), combo = label, type = type, volume = volume)
+  pal <- new_haishoku_palette(toupper(hex), combo = label, type = type, volume = volume)
+  attr(pal, "quality") <- quality
+  pal
 }
 
 #' @rdname haishoku_palette
@@ -123,26 +162,38 @@ delta_e_matrix <- function(hex) {
   farver::compare_colour(rgb, rgb, from_space = "rgb", method = "cie2000")
 }
 
-diverging_anchors <- function(hex, mid = NULL, volume = 1) {
+# End, middle, end. Uses the best arrangement that passes diverging_options()
+# unless `mid` is forced; otherwise falls back to the most distinct pair around
+# the lightest (or darkest) colour, or White (Black), and marks it "none".
+diverging_anchors <- function(hex, mid = NULL, middle = "auto", volume = 1) {
   if (is.null(mid)) {
+    pick <- diverging_pick(hex, middle)
+    if (!is.null(pick)) return(pick)
     l <- lightness(hex)
-    if (length(hex) >= 3 && max(l) >= 75) {
+    if (middle == "dark") {
+      if (length(hex) >= 3 && min(l) <= 35) {
+        mid <- hex[which.min(l)]
+      } else {
+        mid <- "#111314"
+      }
+    } else if (length(hex) >= 3 && max(l) >= 75) {
       mid <- hex[which.max(l)]
-      hex <- hex[-which.max(l)]
     } else {
-      mid <- haishoku_colour("White", volume = 1)
+      mid <- "#FFFFFF"
     }
+    forced <- FALSE
   } else {
     mid <- as_hex(mid, volume)
-    hex <- setdiff(hex, mid)
+    forced <- TRUE
   }
+  hex <- setdiff(hex, mid)
   if (length(hex) < 2) stop("A diverging palette needs two colours besides the midpoint.", call. = FALSE)
   if (length(hex) > 2) {
     de <- delta_e_matrix(hex)
     ends <- which(de == max(de), arr.ind = TRUE)[1, ]
     hex <- hex[sort(ends)]
   }
-  unname(c(hex[1], as_hex(mid, volume), hex[2]))
+  structure(unname(c(hex[1], mid, hex[2])), middle = if (forced) "forced" else "none")
 }
 
 #' Extend a palette with further dictionary colours
