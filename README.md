@@ -8,8 +8,8 @@ Between 1933 and 1934 the painter and costume designer Sanzo Wada published
 Seigensha's editors reworked it into a single compact volume, *A Dictionary of
 Color Combinations* (配色事典, *Haishoku Jiten*), with Wada credited as
 author. *Haishoku* means colour arrangement. The package includes
-all **159 named colours** with the book's **CMYK printing recipes**, and all
-**348 combinations** (pairs 1–120, trios 121–240, quads 241–348).
+all 159 named colours with the book's CMYK printing recipes, and all
+348 combinations (pairs 1–120, trios 121–240, quads 241–348).
 
 ## Installation
 
